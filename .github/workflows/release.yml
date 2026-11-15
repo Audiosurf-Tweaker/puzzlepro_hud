@@ -32,11 +32,13 @@ jobs:
       - name: Build the script
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force build | Out-Null
           $dll = Get-ChildItem tweaker/TweakerLuaLinker/bin/Release -Recurse -Filter twllink.dll |
                  Select-Object -First 1
           if (-not $dll) { throw "twllink.dll was not built" }
           dotnet $dll.FullName --project . --out build
           if ($LASTEXITCODE -ne 0) { throw "twllink failed" }
+          Get-ChildItem build | Select-Object Name, Length
 
       - name: Check that the tag matches the project version
         shell: pwsh
