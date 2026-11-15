@@ -1,0 +1,59 @@
+# Builds the project with twllink from the Tweaker's repository and attaches the bundle and its line
+# map to the GitHub release for the pushed tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the Tweaker for twllink
+        uses: actions/checkout@v4
+        with:
+          repository: Unchpokable/Audiosurf-Tweaker
+          ref: Revive
+          path: tweaker
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build twllink
+        run: dotnet build tweaker/TweakerLuaLinker/TweakerLuaLinker.csproj -c Release
+
+      - name: Build the script
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem tweaker/TweakerLuaLinker/bin/Release -Recurse -Filter twllink.dll |
+                 Select-Object -First 1
+          if (-not $dll) { throw "twllink.dll was not built" }
+          dotnet $dll.FullName --project . --out build
+          if ($LASTEXITCODE -ne 0) { throw "twllink failed" }
+
+      - name: Check that the tag matches the project version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content twproject.json -Raw
+          if ($manifest -notmatch '"version"\s*:\s*"([^"]+)"') { throw "twproject.json has no version" }
+          $version = $Matches[1]
+          $tag = $env:GITHUB_REF_NAME.TrimStart('v')
+          if ($version -ne $tag) {
+            throw "twproject.json version $version does not match tag $env:GITHUB_REF_NAME"
+          }
+
+      - name: Attach the bundle
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" `
+            build/puzzlepro_hud.lua build/puzzlepro_hud.lua.map `
+            --title "$env:GITHUB_REF_NAME" --generate-notes
